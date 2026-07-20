@@ -1,0 +1,93 @@
+[project]
+name = "target-linear"
+version = "0.1.0"
+description = "`target-linear` is a Singer target for Linear, built with the Meltano Singer SDK."
+readme = "README.md"
+authors = [{ name = "Pulumi" }]
+maintainers = [{ name = "Pulumi" }]
+keywords = ["ELT", "Linear", "Singer", "Meltano", "Salesforce"]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.13,<4.0"
+classifiers = [
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "singer-sdk~=0.54",
+    "requests~=2.32",
+]
+
+[project.urls]
+Homepage = "https://github.com/pulumi/target-linear"
+Repository = "https://github.com/pulumi/target-linear"
+
+[project.scripts]
+target-linear = "target_linear.target:TargetLinear.cli"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "responses>=0.25",
+    "ruff>=0.14",
+    "mypy>=1.11",
+    "types-requests>=2.32",
+]
+
+[tool.poetry]
+packages = [{ include = "target_linear" }]
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+src = ["target_linear", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "F",    # pyflakes
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "N",    # pep8-naming
+    "D",    # pydocstyle
+    "UP",   # pyupgrade
+    "ANN",  # flake8-annotations
+    "S",    # flake8-bandit
+    "B",    # flake8-bugbear
+    "A",    # flake8-builtins
+    "C4",   # flake8-comprehensions
+    "DTZ",  # flake8-datetimez
+    "T20",  # flake8-print
+    "SIM",  # flake8-simplify
+    "PTH",  # flake8-use-pathlib
+    "PL",   # pylint
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "COM812",  # conflicts with the formatter
+    "ISC001",  # conflicts with the formatter
+    "D203",    # incompatible with D211
+    "D213",    # incompatible with D212
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "ANN", "D", "PLR2004", "SLF001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["target_linear"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.13"
+warn_unused_configs = true
+ignore_missing_imports = true

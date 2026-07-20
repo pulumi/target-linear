@@ -1,0 +1,77 @@
+send_anonymous_usage_stats: true
+default_environment: dev
+project_id: target-linear
+plugins:
+  extractors:
+  - name: tap-smoke-test
+    namespace: tap_smoke_test
+    pip_url: git+https://github.com/meltano/tap-smoke-test.git
+    executable: tap-smoke-test
+    config:
+      streams:
+      - stream_name: customers
+        input_filename: ./sample_data/customers.jsonl
+      stream_maps:
+        customers:
+          __key_properties__: [external_ids]
+  loaders:
+  - name: target-linear
+    namespace: target_linear
+    pip_url: -e .
+    settings:
+    - name: auth_token
+      kind: password
+      label: Linear API Key
+    - name: api_url
+    - name: batch_size
+      kind: integer
+    - name: domain_sync_mode
+      kind: options
+      options:
+      - label: Merge with existing domains
+        value: merge
+      - label: Replace with source domains
+        value: replace
+      - label: Set on create only
+        value: create_only
+    - name: dry_run
+      kind: boolean
+    - name: fail_on_unresolved_reference
+      kind: boolean
+    - name: fail_on_unknown_stream
+      kind: boolean
+    - name: stop_on_error
+      kind: boolean
+    - name: stream_entity_map
+      kind: object
+    - name: max_retries
+      kind: integer
+    - name: rate_limit_buffer
+      kind: integer
+    - name: user_agent
+    - name: add_record_metadata
+      kind: boolean
+    config:
+      # Never inline the API key here. This reads the token from the environment so
+      # it stays out of version control.
+      auth_token: ${LINEAR_TOKEN}
+      # Safe by default. The 'live' environment is the only thing that turns this
+      # off, so writing to a real workspace is always an explicit choice.
+      dry_run: true
+environments:
+# meltano run tap-smoke-test target-linear
+- name: dev
+  config:
+    plugins:
+      loaders:
+      - name: target-linear
+        config:
+          dry_run: true
+# meltano --environment=live run tap-smoke-test target-linear
+- name: live
+  config:
+    plugins:
+      loaders:
+      - name: target-linear
+        config:
+          dry_run: false

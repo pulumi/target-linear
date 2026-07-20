@@ -1,0 +1,2 @@
+{"name": "Acme Corp", "external_ids": ["001PQ00000ACME01"], "domains": ["acme.example"], "status": "Active", "revenue": 120000, "size": 450}
+{"name": "Direct", "external_ids": ["001PQ00000DIRECT02"], "domains": ["direct.example"], "status": "Prospect", "revenue": 42000, "size": 90}

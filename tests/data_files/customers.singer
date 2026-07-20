@@ -1,0 +1,5 @@
+{"type": "SCHEMA", "stream": "customers", "key_properties": ["external_ids"], "schema": {"type": "object", "properties": {"name": {"type": "string"}, "external_ids": {"type": "array", "items": {"type": "string"}}, "domains": {"type": "array", "items": {"type": "string"}}, "status": {"type": "string"}, "tier": {"type": "string"}, "owner": {"type": "string"}, "revenue": {"type": "integer"}, "size": {"type": "integer"}}}}
+{"type": "RECORD", "stream": "customers", "record": {"name": "Acme Corp", "external_ids": ["001PQ00000ACME01"], "domains": ["acme.example"], "status": "Active", "tier": "Enterprise", "owner": "ada@example.com", "revenue": 120000, "size": 450}}
+{"type": "RECORD", "stream": "customers", "record": {"name": "Direct", "external_ids": ["001PQ00000DIRECT02"], "domains": ["direct.example"], "status": "Prospect", "tier": "Team Growth", "owner": "grace@example.com", "revenue": 42000, "size": 90}}
+{"type": "RECORD", "stream": "customers", "record": {"name": "Initech", "external_ids": ["001PQ00000INITEC"], "domains": ["initech.example"], "status": "Active", "revenue": 8000, "size": 12}}
+{"type": "STATE", "value": {"bookmarks": {"customers": {}}}}
