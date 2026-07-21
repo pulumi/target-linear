@@ -1,6 +1,6 @@
 [project]
 name = "target-linear"
-version = "0.1.0"
+version = "0.1.1"
 description = "`target-linear` is a Singer target for Linear, built with the Meltano Singer SDK."
 readme = "README.md"
 authors = [{ name = "Pulumi" }]
@@ -8,9 +8,12 @@ maintainers = [{ name = "Pulumi" }]
 keywords = ["ELT", "Linear", "Singer", "Meltano", "Salesforce"]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-requires-python = ">=3.13,<4.0"
+requires-python = ">=3.10,<4.0"
 classifiers = [
     "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
@@ -46,7 +49,7 @@ testpaths = ["tests"]
 addopts = "-ra"
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py310"
 line-length = 88
 src = ["target_linear", "tests"]
 
@@ -88,6 +91,6 @@ known-first-party = ["target_linear"]
 convention = "google"
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.10"
 warn_unused_configs = true
 ignore_missing_imports = true
