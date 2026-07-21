@@ -103,9 +103,15 @@ choices look the way they do. Do not "simplify" them away.
 9. **`externalIds` genuinely appends** on both upsert and update (verified). So the
    follow-up update sends only the IDs Linear doesn't already have, or re-runs would
    accumulate duplicates.
-10. **Never use `tierName`.** It auto-creates missing tiers, which conflicts with the
+10. **Statuses and tiers have BOTH `name` and `displayName`, and they can differ.**
+    The API's `name` is canonical; **Linear's UI renders `displayName`**, so that is what
+    a human building a source mapping will copy. `_name_map()` accepts both, exact and
+    casefolded, with `name` winning on collision. Selecting only `name` silently fails
+    to resolve UI-derived mappings — verified against a live workspace where several
+    statuses and tiers had been relabelled.
+11. **Never use `tierName`.** It auto-creates missing tiers, which conflicts with the
     warn-and-drop policy for unresolved references.
-11. **A failed merge lookup must abort, never fall back to `replace`.** Silently
+12. **A failed merge lookup must abort, never fall back to `replace`.** Silently
     degrading from "preserve domains" to "overwrite domains" on a transient read
     failure would be the worst possible failure mode.
 
@@ -124,5 +130,5 @@ Test data lives in `tests/data_files/*.singer` and is fed through `target.listen
 
 ## Python Compatibility
 
-Python 3.13+ only. This is a deliberate pin to the interpreter we run on rather than a
-technical constraint — nothing in the codebase is version-specific.
+Python 3.10+. Nothing in the codebase is version-specific; the floor tracks what
+`singer-sdk` supports.

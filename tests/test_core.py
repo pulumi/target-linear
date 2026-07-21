@@ -18,6 +18,7 @@ from target_linear.client import (
     LinearClient,
     LinearFatalError,
     LinearRetriableError,
+    _name_map,
 )
 from target_linear.sinks import (
     CustomerNeedSink,
@@ -380,14 +381,14 @@ def _lookup(nodes: list[dict]) -> dict:
 
 ONE_DOMAIN_RECORD = [
     {
-        "name": "eRezlife",
-        "external_ids": ["001PQ00000QlwxfYAB"],
-        "domains": ["erezlife.com"],
+        "name": "Acme Corp",
+        "external_ids": ["SFDC-ACME-001"],
+        "domains": ["acme.example"],
     },
 ]
 
 CURATED = [
-    _existing("eRezlife", ["001PQ00000QlwxfYAB"], ["bender.io", "erezlife.com"]),
+    _existing("Acme Corp", ["SFDC-ACME-001"], ["acme-labs.example", "acme.example"]),
 ]
 
 
@@ -401,10 +402,10 @@ def test_merge_mode_preserves_domains_the_warehouse_does_not_know(
     target.listen(singer_lines("customers", CUSTOMER_SCHEMA, ONE_DOMAIN_RECORD))
 
     sent = linear_api.calls_for("BatchCustomerUpsert")[0]["variables"]["input_0"]
-    # bender.io survives even though the record never mentioned it.
+    # acme-labs.example survives even though the record never mentioned it.
     assert "domains" not in sent or set(sent["domains"]) == {
-        "bender.io",
-        "erezlife.com",
+        "acme-labs.example",
+        "acme.example",
     }
 
 
@@ -418,22 +419,22 @@ def test_merge_mode_adds_new_domains(linear_api: Any) -> None:
             CUSTOMER_SCHEMA,
             [
                 {
-                    "name": "eRezlife",
-                    "external_ids": ["001PQ00000QlwxfYAB"],
-                    "domains": ["newdomain.example"],
+                    "name": "Acme Corp",
+                    "external_ids": ["SFDC-ACME-001"],
+                    "domains": ["acme-new.example"],
                 },
             ],
         ),
     )
     sent = linear_api.calls_for("BatchCustomerUpsert")[0]["variables"]["input_0"]
-    assert sent["domains"] == ["bender.io", "erezlife.com", "newdomain.example"]
+    assert sent["domains"] == ["acme-labs.example", "acme.example", "acme-new.example"]
 
 
 def test_merge_mode_omits_domains_when_already_identical(linear_api: Any) -> None:
     """No change means don't send the key at all, so the write can't touch it."""
     linear_api.on(
         "CustomerLookup",
-        data=_lookup([_existing("eRezlife", ["001PQ00000QlwxfYAB"], ["erezlife.com"])]),
+        data=_lookup([_existing("Acme Corp", ["SFDC-ACME-001"], ["acme.example"])]),
     )
     target = make_target(domain_sync_mode="merge")
     target.listen(singer_lines("customers", CUSTOMER_SCHEMA, ONE_DOMAIN_RECORD))
@@ -448,7 +449,7 @@ def test_merge_mode_sets_domains_for_brand_new_customers(linear_api: Any) -> Non
     target.listen(singer_lines("customers", CUSTOMER_SCHEMA, ONE_DOMAIN_RECORD))
 
     sent = linear_api.calls_for("BatchCustomerUpsert")[0]["variables"]["input_0"]
-    assert sent["domains"] == ["erezlife.com"]
+    assert sent["domains"] == ["acme.example"]
 
 
 def test_replace_mode_makes_the_warehouse_authoritative(linear_api: Any) -> None:
@@ -458,7 +459,7 @@ def test_replace_mode_makes_the_warehouse_authoritative(linear_api: Any) -> None
     target.listen(singer_lines("customers", CUSTOMER_SCHEMA, ONE_DOMAIN_RECORD))
 
     sent = linear_api.calls_for("BatchCustomerUpsert")[0]["variables"]["input_0"]
-    assert sent["domains"] == ["erezlife.com"]
+    assert sent["domains"] == ["acme.example"]
 
 
 def test_replace_mode_does_not_pay_for_a_lookup(linear_api: Any) -> None:
@@ -482,7 +483,7 @@ def test_create_only_mode_still_sets_domains_on_create(linear_api: Any) -> None:
     target.listen(singer_lines("customers", CUSTOMER_SCHEMA, ONE_DOMAIN_RECORD))
 
     sent = linear_api.calls_for("BatchCustomerUpsert")[0]["variables"]["input_0"]
-    assert sent["domains"] == ["erezlife.com"]
+    assert sent["domains"] == ["acme.example"]
 
 
 def test_merge_matches_by_domain_when_no_external_id(linear_api: Any) -> None:
@@ -493,13 +494,13 @@ def test_merge_matches_by_domain_when_no_external_id(linear_api: Any) -> None:
         singer_lines(
             "customers",
             CUSTOMER_SCHEMA,
-            [{"name": "eRezlife", "domains": ["erezlife.com"]}],
+            [{"name": "Acme Corp", "domains": ["acme.example"]}],
         ),
     )
     sent = linear_api.calls_for("BatchCustomerUpsert")[0]["variables"]["input_0"]
     assert "domains" not in sent or set(sent["domains"]) == {
-        "bender.io",
-        "erezlife.com",
+        "acme-labs.example",
+        "acme.example",
     }
 
 
@@ -587,6 +588,74 @@ def test_existing_uuids_pass_through_without_lookup(linear_api: Any) -> None:
     sent = linear_api.calls_for("BatchCustomerUpsert")[0]["variables"]["input_0"]
     assert sent["statusId"] == "11111111-1111-1111-1111-111111111111"
     assert linear_api.calls_for("CustomerStatuses") == []
+
+
+def test_display_name_resolves_for_tier(linear_api: Any) -> None:
+    """The UI shows displayName, so warehouse mappings are built from it."""
+    target = make_target()
+    target.listen(
+        singer_lines(
+            "customers",
+            CUSTOMER_SCHEMA,
+            [{"name": "Display Co", "tier": "Acme Growth Plan"}],
+        ),
+    )
+    sent = linear_api.calls_for("BatchCustomerUpsert")[0]["variables"]["input_0"]
+    assert sent["tierId"] == "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+
+def test_display_name_resolves_for_status(linear_api: Any) -> None:
+    target = make_target()
+    target.listen(
+        singer_lines(
+            "customers",
+            CUSTOMER_SCHEMA,
+            [{"name": "Display Co", "status": "Past Customer"}],
+        ),
+    )
+    sent = linear_api.calls_for("BatchCustomerUpsert")[0]["variables"]["input_0"]
+    assert sent["statusId"] == "33333333-3333-3333-3333-333333333333"
+
+
+def test_canonical_name_still_resolves(linear_api: Any) -> None:
+    """Both spellings work; adding displayName must not break `name` lookups."""
+    target = make_target()
+    target.listen(
+        singer_lines(
+            "customers",
+            CUSTOMER_SCHEMA,
+            [{"name": "Canon Co", "status": "Active", "tier": "Growth"}],
+        ),
+    )
+    sent = linear_api.calls_for("BatchCustomerUpsert")[0]["variables"]["input_0"]
+    assert sent["statusId"] == "11111111-1111-1111-1111-111111111111"
+    assert sent["tierId"] == "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+
+def test_name_wins_over_another_entitys_display_name() -> None:
+    """`name` is canonical, so it takes priority on collision."""
+    nodes = [
+        {"id": "id-a", "name": "Alpha", "displayName": "Beta"},
+        {"id": "id-b", "name": "Beta", "displayName": "Gamma"},
+    ]
+    mapping = _name_map(nodes)
+    assert mapping["beta"] == "id-b", "the entity NAMED Beta wins"
+    assert mapping["alpha"] == "id-a"
+    assert mapping["gamma"] == "id-b"
+
+
+def test_display_name_matching_is_exact_not_fuzzy(linear_api: Any) -> None:
+    """Matching stays exact; a partial name must not silently resolve."""
+    target = make_target()
+    target.listen(
+        singer_lines(
+            "customers",
+            CUSTOMER_SCHEMA,
+            [{"name": "Fuzzy Co", "tier": "Acme Growth"}],
+        ),
+    )
+    sent = linear_api.calls_for("BatchCustomerUpsert")[0]["variables"]["input_0"]
+    assert "tierId" not in sent
 
 
 def test_unresolved_reference_warns_and_drops_field(linear_api: Any) -> None:

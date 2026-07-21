@@ -22,7 +22,7 @@ Supported entities:
 pipx install git+https://github.com/pulumi/target-linear.git@main
 ```
 
-Requires Python 3.13+.
+Requires Python 3.10+.
 
 ## Configuration
 
@@ -59,44 +59,46 @@ directory's `.env` if the `--config=ENV` option is specified. Settings map to
 Field names are accepted in **either** `snake_case` or `camelCase`, so warehouse
 columns generally need no renaming.
 
+The authoritative field lists live in
+[`target_linear/schemas.py`](target_linear/schemas.py), and
+[`tests/data_files/`](tests/data_files/) holds runnable Singer message fixtures for
+each stream.
+
 ### `customers`
 
-```json
-{
-  "name": "Acme Corp",
-  "external_ids": ["001PQ00000QlwxfYAB"],
-  "domains": ["acme.com"],
-  "status": "Active",
-  "tier": "Pulumi Enterprise",
-  "owner": "someone@pulumi.com",
-  "revenue": 120000,
-  "size": 450,
-  "slack_channel_id": "C0123456789",
-  "logo_url": "https://acme.com/logo.png"
-}
-```
+| Field | Notes |
+|---|---|
+| `name` | Required, unless `id` identifies an existing customer. |
+| `external_ids` | Identifiers from your source system. |
+| `main_source_id` | Primary external ID; must also appear in `external_ids`. |
+| `domains` | See [Domain sync modes](#domain-sync-modes). |
+| `status`, `tier` | Name or UUID. |
+| `owner` | Email, name, display name, or UUID. |
+| `revenue`, `size` | Integers. |
+| `slack_channel_id`, `logo_url`, `id` | Passed through as-is. |
 
-Only `name` is required. `status`, `tier`, and `owner` accept **either** a Linear UUID
-or a human-readable value (status/tier name; owner email, name, or display name) — the
-target resolves names to IDs against your workspace.
+`status`, `tier`, and `owner` accept **either** a Linear UUID or a human-readable
+value; the target resolves names to IDs against your workspace.
+
+> **Statuses and tiers have two names.** Linear stores a canonical `name` plus a
+> `displayName`, and a workspace can relabel the latter independently. **The Linear UI
+> shows `displayName`**, so that is usually what your source mapping will contain. The
+> target matches either one (exact, case-insensitive), preferring `name` if the two ever
+> collide. If a value looks right in the UI but won't resolve, query `customerTiers` or
+> `customerStatuses` and compare against both fields.
 
 Matching for upsert is by, in order: `id`, the first `external_ids` entry,
 `slack_channel_id`, then `domains`. A record with no match creates a new customer.
 
 ### `customer_needs`
 
-```json
-{
-  "customer_external_id": "001PQ00000QlwxfYAB",
-  "issue_id": "ENG-123",
-  "body": "Needs SSO support before renewal.",
-  "priority": 1
-}
-```
-
-Provide exactly one of `customer_id` / `customer_external_id`, and exactly one of
-`issue_id` / `project_id`. `issue_id` accepts a UUID or an issue identifier like
-`ENG-123`.
+| Field | Notes |
+|---|---|
+| `customer_id` *or* `customer_external_id` | Exactly one. |
+| `issue_id` *or* `project_id` | Exactly one. `issue_id` takes a UUID or an issue identifier. |
+| `body` | Markdown. |
+| `priority` | `0` normal, `1` important. |
+| `attachment_url`, `attachment_id`, `comment_id`, `id` | Optional. |
 
 ## Usage
 
@@ -106,13 +108,14 @@ Provide exactly one of `customer_id` / `customer_external_id`, and exactly one o
 target-linear --version
 target-linear --help
 target-linear --about --format=markdown
-
-# Pipe Singer messages in
-cat customers.singer | target-linear --config config.json
 ```
 
-Always start with `"dry_run": true` when pointing at a real workspace for the first
-time.
+The target reads Singer messages on stdin, so any tap can be piped into
+`target-linear --config config.json`.
+
+Set `dry_run` to `true` the first time you point it at a workspace. Reference lookups
+still run, so the resolved mutations are logged and validated without anything being
+written.
 
 ## Caveats
 
@@ -120,10 +123,10 @@ Linear's customer API has some field semantics that are easy to get wrong:
 
 - **Domains are replaced, not merged — on every write.** Linear's documentation states
   that `customerUpsert` merges `domains`; **it does not**. Verified against the live
-  API: a customer holding `[a, b]` upserted with `[a]` ends up with `[a]`, and upserted
-  with `[c]` ends up with `[c]`. `customerUpdate` replaces too. Omitting the key is the
-  only way to leave existing domains untouched. This is what `domain_sync_mode` exists
-  to manage — see [Domain sync modes](#domain-sync-modes).
+  API: the submitted list wholly replaces the stored one, on both `customerUpsert` and
+  `customerUpdate`. Omitting the key is the only way to leave existing domains
+  untouched. This is what `domain_sync_mode` exists to manage — see
+  [Domain sync modes](#domain-sync-modes).
 - **`externalIds` genuinely does append.** Upserting a customer under a second external
   ID adds it rather than replacing, so a customer can accumulate IDs from several source
   systems. The target only issues a follow-up `customerUpdate` when a record supplies

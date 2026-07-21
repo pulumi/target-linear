@@ -30,15 +30,38 @@ SAMPLE_CONFIG: dict[str, Any] = {
 
 _OPERATION_RE = re.compile(r"^\s*(?:query|mutation)\s+(\w+)")
 
+# Statuses and tiers carry both `name` and `displayName`. They are often identical,
+# but a workspace can rename the displayed label independently -- so each list below
+# holds at least one entry where the two diverge.
 STATUSES = [
-    {"id": "11111111-1111-1111-1111-111111111111", "name": "Active"},
-    {"id": "22222222-2222-2222-2222-222222222222", "name": "Prospect"},
-    {"id": "33333333-3333-3333-3333-333333333333", "name": "Churned"},
+    {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "name": "Active",
+        "displayName": "Active",
+    },
+    {
+        "id": "22222222-2222-2222-2222-222222222222",
+        "name": "Prospect",
+        "displayName": "Prospect",
+    },
+    {
+        "id": "33333333-3333-3333-3333-333333333333",
+        "name": "Archived",
+        "displayName": "Past Customer",
+    },
 ]
 
 TIERS = [
-    {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "name": "Enterprise"},
-    {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "name": "Team Growth"},
+    {
+        "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "name": "Enterprise",
+        "displayName": "Enterprise",
+    },
+    {
+        "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "name": "Growth",
+        "displayName": "Acme Growth Plan",
+    },
 ]
 
 USERS = [

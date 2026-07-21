@@ -8,10 +8,14 @@ from __future__ import annotations
 
 # --- Lookup queries -------------------------------------------------------------------
 
+# NOTE: statuses and tiers carry BOTH `name` and `displayName`, and a workspace can
+# rename the displayed label independently of the canonical name. Linear's UI shows
+# `displayName`, so that is what a human building a source mapping will copy. Both
+# must be selected here, or those mappings silently fail to resolve.
 CUSTOMER_STATUSES_QUERY = """
 query CustomerStatuses {
   customerStatuses(first: 250) {
-    nodes { id name }
+    nodes { id name displayName }
   }
 }
 """
@@ -19,7 +23,7 @@ query CustomerStatuses {
 CUSTOMER_TIERS_QUERY = """
 query CustomerTiers {
   customerTiers(first: 250) {
-    nodes { id name }
+    nodes { id name displayName }
   }
 }
 """
