@@ -392,21 +392,21 @@ class LinearClient:
     def _status_map(self) -> dict[str, str]:
         if self._statuses is None:
             data = self.execute(CUSTOMER_STATUSES_QUERY)
-            self._statuses = {
-                node["name"].casefold(): node["id"]
-                for node in data["customerStatuses"]["nodes"]
-            }
-            logger.info("Loaded %d customer statuses from Linear", len(self._statuses))
+            self._statuses = _name_map(data["customerStatuses"]["nodes"])
+            logger.info(
+                "Loaded %d customer status lookup keys from Linear",
+                len(self._statuses),
+            )
         return self._statuses
 
     def _tier_map(self) -> dict[str, str]:
         if self._tiers is None:
             data = self.execute(CUSTOMER_TIERS_QUERY)
-            self._tiers = {
-                node["name"].casefold(): node["id"]
-                for node in data["customerTiers"]["nodes"]
-            }
-            logger.info("Loaded %d customer tiers from Linear", len(self._tiers))
+            self._tiers = _name_map(data["customerTiers"]["nodes"])
+            logger.info(
+                "Loaded %d customer tier lookup keys from Linear",
+                len(self._tiers),
+            )
         return self._tiers
 
     def _user_map(self) -> dict[str, str]:
@@ -511,6 +511,32 @@ class LinearClient:
         )
         nodes = data["customers"]["nodes"]
         return nodes[0] if nodes else None
+
+
+def _name_map(nodes: list[dict[str, Any]]) -> dict[str, str]:
+    """Build a casefolded ``name``/``displayName`` -> id map for lookup entities.
+
+    Linear's statuses and tiers each carry two names and they frequently differ --
+    the API's ``name`` is the canonical one, while the UI renders ``displayName``,
+    which is what a human building a warehouse mapping will copy. Both are accepted.
+
+    ``name`` wins when one entity's ``name`` collides with another's
+    ``displayName``, since ``name`` is canonical.
+
+    Args:
+        nodes: Nodes carrying ``id``, ``name``, and optionally ``displayName``.
+
+    Returns:
+        Lookup keys mapped to entity IDs.
+    """
+    by_display: dict[str, str] = {}
+    by_name: dict[str, str] = {}
+    for node in nodes:
+        if node.get("displayName"):
+            by_display.setdefault(node["displayName"].strip().casefold(), node["id"])
+        if node.get("name"):
+            by_name.setdefault(node["name"].strip().casefold(), node["id"])
+    return {**by_display, **by_name}
 
 
 def _is_uuid(value: str) -> bool:
