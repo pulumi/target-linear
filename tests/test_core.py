@@ -233,6 +233,50 @@ def test_batch_failure_replays_record_by_record(linear_api: Any) -> None:
         assert sorted(call["variables"]) == ["input_0"]
 
 
+def test_domain_rejection_syncs_without_domains(linear_api: Any) -> None:
+    """A Linear-side domain rejection drops the domains, not the record."""
+    linear_api.on(
+        "BatchCustomerUpsert",
+        data=None,
+        errors=[graphql_error("public domain not allowed", path=["m0"])],
+    )
+    linear_api.on(
+        "BatchCustomerUpsert",
+        data=None,
+        errors=[graphql_error("public domain not allowed", path=["m0"])],
+    )
+
+    target = make_target()
+    singer_file_to_target("customers.singer", target)
+
+    calls = linear_api.calls_for("BatchCustomerUpsert")
+    # Failed batch, offender replay with domains, retry without, two other replays.
+    assert len(calls) == 5
+    offender = calls[1]["variables"]["input_0"]
+    retried = calls[2]["variables"]["input_0"]
+    assert offender["domains"] == ["acme.example"]
+    assert "domains" not in retried
+    assert retried["externalId"] == offender["externalId"]
+
+
+def test_non_domain_rejection_still_fails(linear_api: Any) -> None:
+    """Only domain rejections self-heal; other fatal errors still stop the run."""
+    linear_api.on(
+        "BatchCustomerUpsert",
+        data=None,
+        errors=[graphql_error("Entity not found: Customer", path=["m0"])],
+    )
+    linear_api.on(
+        "BatchCustomerUpsert",
+        data=None,
+        errors=[graphql_error("Entity not found: Customer", path=["m0"])],
+    )
+
+    target = make_target()
+    with pytest.raises(LinearFatalError):
+        singer_file_to_target("customers.singer", target)
+
+
 def test_successful_batch_is_not_replayed(linear_api: Any) -> None:
     target = make_target()
     singer_file_to_target("customers.singer", target)
