@@ -213,7 +213,7 @@ class TargetLinear(Target):
         should produce one summary line, not 5,000 warnings.
 
         Args:
-            kind: One of ``status``, ``tier``, or ``owner``.
+            kind: One of ``status``, ``tier``, ``owner``, or ``domain``.
             value: The value that could not be resolved.
         """
         key = (kind, value)

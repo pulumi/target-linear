@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from singer_sdk.sinks import BatchSink
 
-from target_linear.client import LinearAPIError, LinearAuthError
+from target_linear.client import LinearAPIError, LinearAuthError, LinearFatalError
 from target_linear.mutations import (
     build_customer_need_create_document,
     build_customer_update_document,
@@ -114,6 +114,30 @@ def _scalar_fields(data: dict[str, Any]) -> dict[str, Any]:
         if data.get(source):
             out[target_key] = str(data[source])
     return out
+
+
+def _record_identity(record: dict[str, Any]) -> str:
+    """Compact human-readable identity of a record for failure logs."""
+    data = normalize_keys(record, CUSTOMER_FIELD_ALIASES)
+    parts = []
+    for key in (
+        "name",
+        "external_ids",
+        "domains",
+        "customer_external_id",
+        "customer_id",
+        "issue_id",
+        "project_id",
+    ):
+        value = data.get(key)
+        if value is None or value == "":
+            continue
+        if isinstance(value, list):
+            rendered = ", ".join(str(v) for v in value)
+        else:
+            rendered = value
+        parts.append(f"{key}={rendered!r}")
+    return "(" + "; ".join(parts) + ")" if parts else "(unidentifiable)"
 
 
 def _first_match(
@@ -224,11 +248,15 @@ class LinearSink(BatchSink):
             Exception: Re-raises when ``stop_on_error`` is enabled.
         """
         self._target.note_record_failure(self.stream_name, record, reason)
+        identity = _record_identity(record)
         if self.config.get("stop_on_error", True):
+            logger.error(
+                "[%s] Failing record %s: %s", self.stream_name, identity, reason
+            )
             if isinstance(reason, BaseException):
                 raise reason
             raise RecordError(str(reason))
-        logger.error("[%s] Skipping record: %s", self.stream_name, reason)
+        logger.error("[%s] Skipping record %s: %s", self.stream_name, identity, reason)
 
     def clean_up(self) -> None:
         """Log a per-stream summary when the stream finishes."""
@@ -453,8 +481,61 @@ class CustomerSink(LinearSink):
         except LinearAuthError:
             raise
         except LinearAPIError as exc:
+            if self._is_domain_rejection(item, exc):
+                self._retry_without_domains(item, exc)
+                return
             self.fail_record(item.record, exc)
             return
+        self._finish(item, data.get("m0") or {})
+
+    @staticmethod
+    def _is_domain_rejection(item: PreparedCustomer, exc: LinearAPIError) -> bool:
+        """Whether a fatal rejection is about this record's domain list.
+
+        Linear validates domains server-side against rules this target cannot
+        replicate ("public domain not allowed", "invalid domain", "customer
+        domain already exists"), so any fatal error mentioning domains on a
+        record that sent some is treated as a domain rejection.
+        """
+        return (
+            isinstance(exc, LinearFatalError)
+            and not isinstance(exc, LinearAuthError)
+            and "domain" in str(exc).lower()
+            and bool(item.upsert_input.get("domains") or item.domains)
+        )
+
+    def _retry_without_domains(
+        self,
+        item: PreparedCustomer,
+        cause: LinearAPIError,
+    ) -> None:
+        """Rewrite a domain-rejected record without domains so it still syncs.
+
+        The customer still upserts and matches by external id; only the domain
+        list is dropped, and the drop is logged and counted like an unresolved
+        reference so the run summary surfaces exactly which domains Linear
+        refused.
+        """
+        domains = item.domains or list(item.upsert_input.get("domains") or [])
+        stripped = {k: v for k, v in item.upsert_input.items() if k != "domains"}
+        try:
+            data = self.client.execute(
+                build_customer_upsert_document(1),
+                {"input_0": stripped},
+            )
+        except LinearAuthError:
+            raise
+        except LinearAPIError as exc:
+            self.fail_record(item.record, exc)
+            return
+        logger.warning(
+            "[%s] Linear refused the domains of record %s (%s); synced it "
+            "without domains.",
+            self.stream_name,
+            _record_identity(item.record),
+            cause,
+        )
+        self._target.note_reference_miss("domain", ", ".join(domains) or "<unknown>")
         self._finish(item, data.get("m0") or {})
 
     def _finish(self, item: PreparedCustomer, payload: dict[str, Any]) -> None:
